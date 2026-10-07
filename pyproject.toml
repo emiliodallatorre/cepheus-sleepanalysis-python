@@ -1,0 +1,22 @@
+[project]
+name = "cepheus-sleepanalysis-python"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Emilio Dalla Torre", email = "info@emiliodallatorre.it" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "curl-cffi>=0.16.3",
+    "garminconnect>=0.3.17",
+    "kedro>=1.7.0",
+    "kedro-viz>=12.5.0",
+]
+
+[project.scripts]
+cepheus-sleepanalysis-python = "cepheus_sleepanalysis_python:main"
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
