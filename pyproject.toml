@@ -1,7 +1,7 @@
 [project]
 name = "cepheus-sleepanalysis-python"
 version = "0.1.0"
-description = "Add your description here"
+description = "Local Kedro analysis of Apple Screen Time and Garmin sleep scores"
 readme = "README.md"
 authors = [
     { name = "Emilio Dalla Torre", email = "info@emiliodallatorre.it" }
@@ -12,10 +12,28 @@ dependencies = [
     "garminconnect>=0.3.17",
     "kedro>=1.7.0",
     "kedro-viz>=12.5.0",
+    "kedro-datasets[pandas-parquetdataset,json-jsondataset,pickle-pickledataset,plotly-jsondataset,text-textdataset]>=9.0",
+    "pandas>=2.2",
+    "numpy>=2.0",
+    "pyarrow>=19.0",
+    "scipy>=1.15",
+    "scikit-learn>=1.6",
+    "plotly>=5.24,<6",
 ]
 
 [project.scripts]
 cepheus-sleepanalysis-python = "cepheus_sleepanalysis_python:main"
+cepheus-garmin-login = "cepheus_sleepanalysis_python.sources:login"
+
+[tool.kedro]
+package_name = "cepheus_sleepanalysis_python"
+project_name = "Cepheus Sleep Analysis"
+kedro_init_version = "1.7.0"
+source_dir = "src"
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
 
 [build-system]
 requires = ["uv_build>=0.12.17,<0.13.0"]

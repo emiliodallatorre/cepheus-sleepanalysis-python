@@ -1,0 +1,48 @@
+raw_screen:
+  type: json.JSONDataset
+  filepath: ${globals:data_root}/01_raw/screen.json
+raw_sleep:
+  type: json.JSONDataset
+  filepath: ${globals:data_root}/01_raw/sleep.json
+sessions:
+  type: pandas.ParquetDataset
+  filepath: ${globals:data_root}/02_intermediate/sessions.parquet
+sleep:
+  type: pandas.ParquetDataset
+  filepath: ${globals:data_root}/02_intermediate/sleep.parquet
+usage:
+  type: pandas.ParquetDataset
+  filepath: ${globals:data_root}/04_feature/usage.parquet
+aligned:
+  type: pandas.ParquetDataset
+  filepath: ${globals:data_root}/05_model_input/aligned.parquet
+quality:
+  type: json.JSONDataset
+  filepath: ${globals:data_root}/08_reporting/quality.json
+correlations:
+  type: pandas.ParquetDataset
+  filepath: ${globals:data_root}/08_reporting/correlations.parquet
+timeseries_chart:
+  type: plotly.JSONDataset
+  filepath: ${globals:data_root}/08_reporting/timeseries.json
+scatter_chart:
+  type: plotly.JSONDataset
+  filepath: ${globals:data_root}/08_reporting/scatter.json
+model:
+  type: pickle.PickleDataset
+  filepath: ${globals:data_root}/06_models/sleep.pkl
+metrics:
+  type: json.JSONDataset
+  filepath: ${globals:data_root}/07_model_output/metrics.json
+backtest:
+  type: pandas.ParquetDataset
+  filepath: ${globals:data_root}/07_model_output/backtest.parquet
+forecast:
+  type: json.JSONDataset
+  filepath: ${globals:data_root}/07_model_output/forecast.json
+forecast_history:
+  type: pandas.ParquetDataset
+  filepath: ${globals:data_root}/07_model_output/forecast_history.parquet
+report:
+  type: text.TextDataset
+  filepath: ${globals:data_root}/08_reporting/report.html

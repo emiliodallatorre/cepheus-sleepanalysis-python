@@ -3,6 +3,13 @@
 
 ### macOS ###
 # General
+data/
+conf/local/*
+!conf/local/.gitkeep
+.viz/
+.kedro/
+logs/
+garmin_tokens.json
 .DS_Store
 .AppleDouble
 .LSOverride

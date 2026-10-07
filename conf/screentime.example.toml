@@ -1,0 +1,14 @@
+timezone = "Europe/Rome"
+
+[sources]
+biome = true
+knowledgec = true
+
+[lookup]
+enabled = false
+
+[influx]
+url = ""
+
+[home_assistant]
+url = ""

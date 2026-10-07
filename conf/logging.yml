@@ -1,0 +1,18 @@
+version: 1
+disable_existing_loggers: false
+formatters:
+  simple:
+    format: "%(asctime)s %(levelname)s %(name)s: %(message)s"
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: simple
+    stream: ext://sys.stderr
+root:
+  level: INFO
+  handlers: [console]
+loggers:
+  garminconnect:
+    level: WARNING
+  httpx:
+    level: WARNING

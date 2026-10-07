@@ -1,0 +1,24 @@
+study:
+  timezone: Europe/Rome
+  cutoff: "20:00"
+  history_days: 180
+  refresh_days: 7
+  demo: false
+  demo_now: "2026-10-07T20:15:00+02:00"
+  data_root: ${globals:data_root}
+  screentime_executable: screentime
+  screentime_revision: c25696a3ddac32058ae809f63c04e2bfc0c8dc0f
+  screentime_config: "~/.config/screentime/config.toml"
+  garmin_tokenstore: "~/.config/cepheus/garmin"
+  garmin_region: global
+  device_ids: []
+  device_platforms: {}
+  # User-confirmed coverage: [{device_id: "...", start: "YYYY-MM-DD", end: "YYYY-MM-DD"}].
+  confirmed_coverage: []
+  max_collection_age_minutes: 45
+  retry_attempts: 3
+  request_pause_seconds: 0.5
+  min_paired_nights: 60
+  initial_training_nights: 40
+  min_backtest_nights: 20
+  ridge_alpha: 10.0
