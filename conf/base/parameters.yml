@@ -15,6 +15,7 @@ study:
   device_platforms: {}
   # User-confirmed coverage: [{device_id: "...", start: "YYYY-MM-DD", end: "YYYY-MM-DD"}].
   confirmed_coverage: []
+  coverage_policy: confirmed
   max_collection_age_minutes: 45
   retry_attempts: 3
   request_pause_seconds: 0.5

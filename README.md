@@ -108,6 +108,7 @@ so only overrides are necessary:
 
 ```yaml
 study:
+  coverage_policy: observed_sum
   device_ids: ["mac:YOUR-UUID", "YOUR-PHONE-UUID", "YOUR-IPAD-UUID"]
   device_platforms:
     "mac:YOUR-UUID": mac
@@ -131,10 +132,18 @@ Collection provenance is retained in the session archive. A local hashed Garmin
 account marker prevents accidental reuse of a data root with another account;
 choose a new data root when changing accounts or Garmin region.
 
-With no confirmed coverage, daily usage remains unknown, paired-night analysis
-is unavailable, and tonight's forecast is not ready. A confirmed covered day
-with no sessions is treated as zero usage; an unknown day is never zero-filled.
-Updating coverage ranges does not discard the session archive.
+Your local configuration uses `coverage_policy: observed_sum`: available usage
+is summed across all five selected devices, including devices with no records.
+Absent device records contribute zero observed minutes, with explicit
+incomplete-coverage warnings. Analysis and forecasting do not require confirmed
+coverage under this policy. Dates before the first retained session remain
+unavailable; subsequent gaps can be zero observed usage, not proven inactivity.
+The first retained day may also be partial. Incomplete sync can bias results.
+
+The base/demo default, `coverage_policy: confirmed`, retains the stricter rule:
+only confirmed covered days are usable. A covered day with no sessions is zero;
+an unknown day is unavailable. Updating coverage or the policy requires rebuilding
+preparation and training but does not discard the session archive.
 
 Defaults in [`conf/base/parameters.yml`](conf/base/parameters.yml):
 
@@ -188,17 +197,25 @@ today's usage computed from an older collection.
 
 ### Temporal semantics
 
-Exposure day **D** uses sessions in `[D 00:00, D 20:00)`, and is joined with
-sleep scored on morning **D+1**. Tonight's forecast targets tomorrow morning,
-not the score Garmin recorded this morning.
+Plots use the full calendar day **D**, `[D 00:00, D+1 00:00)`, joined with sleep
+scored on morning **D+1**. Tonight's forecast still uses `[D 00:00, D 20:00)`;
+full-day usage is unavailable at 20:00. It targets tomorrow morning,
+not the score Garmin recorded this morning. Full-day plots are retrospective
+and may include usage after sleep onset, not just pre-sleep exposure.
 
 Intervals are timezone-aware and clipped using actual elapsed time, including
-midnight and DST transitions. Per-device and per-platform usage count the union
-of that device/platform's intervals. **Combined minutes** union all selected
+midnight and DST transitions. The exporter rounds session timestamps to whole
+seconds; positive sub-second sessions with identical start/end timestamps are
+restored using their fractional `duration_s`, with a logged warning. Their
+placement retains up to one second of uncertainty; reversed or otherwise
+nonpositive intervals remain errors. Per-device usage counts the union of that
+device's intervals; platform totals sum their devices. **Combined minutes** union all selected
 devices, so simultaneous phone/laptop use is not double-counted.
 **Summed device-minutes** deliberately adds per-device totals and can exceed
-combined wall-clock minutes. Full-day combined usage is retained only for
-completed covered days; it is not a regression feature.
+combined wall-clock minutes. The scatterplot uses full-day summed device-minutes;
+regression retains cutoff-window summed device-minutes. Summed evening minutes
+similarly add each device's usage from 18:00 to cutoff. Full-day summed and
+combined usage are retained only for completed usable days, not regression features.
 
 The main-overnight heuristic requires sleep to end on Garmin's reported date,
 start after the preceding day's cutoff and before morning noon, last 2–16
@@ -210,13 +227,24 @@ adapt it deliberately if your schedule involves shifts/daytime main sleep.
 ### Correlation and prediction
 
 Eligible paired nights feed Pearson and Spearman correlations for combined,
-evening, summed-device, per-device and per-platform cutoff usage. The report
+evening, summed-device, per-device and per-platform cutoff usage, plus full-day
+summed and combined usage for completed days. The report
 includes sample counts, date coverage, excluded observations, weekday/weekend
 summaries, time-series and scatter charts. Constant or short series are explicitly
 unavailable. No independent-sample p-values, causal claims or mined lag searches
 are presented.
 
-Ridge features are combined minutes, evening minutes from 18:00 to cutoff, and
+Time-series plots use full-day totals and are restricted to completed dates with
+available Screen Time; Garmin-only dates before Screen Time history and unfinished days are
+omitted. Zero observed usage remains visible. The report includes a simple
+Screen Time versus following-morning sleep-score scatterplot in summed
+device-hours from 00:00 through 24:00, plus a table of eligible full-day paired values.
+The scatterplot includes a descriptive least-squares trend line, Pearson r,
+in-sample R-squared and slope in score points per device-hour when at least three
+pairs and nonconstant axes are available. These are association summaries,
+not causal effects or forecast evaluation. The paired table is sorted by Screen Time.
+
+Ridge features are summed device-minutes, summed evening minutes from 18:00 to cutoff, and
 weekend indicator. Each backtest fits scaling/regression only on earlier paired
 nights; its mean baseline uses earlier valid sleep scores, including scores
 without confirmed Screen Time. MAE selects the model and RMSE is also reported.
@@ -229,7 +257,9 @@ not an as-of-time reconstruction.
   the historical average as `baseline_only`, explicitly not usage-based.
 - **At least 60 pairs:** use ridge only if its chronological backtest MAE is
   lower than the historical-average baseline; otherwise keep `baseline_only`.
-- **Stale/unconfirmed current data:** `not_ready`, no numerical forecast.
+- **Stale/unavailable current data:** `not_ready`, no numerical forecast.
+  Unconfirmed coverage also blocks forecasts under `confirmed`; under
+  `observed_sum` it produces a warning instead.
 
 Estimates are bounded to 0–100, with unclipped estimates and clipping flags
 retained. Historical error is not a confidence interval or a guarantee. Inputs

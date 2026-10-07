@@ -4,6 +4,7 @@ study:
   history_days: 180
   refresh_days: 7
   demo: true
+  coverage_policy: confirmed
   demo_now: "2026-10-07T20:15:00+02:00"
   data_root: ${globals:data_root}
   screentime_executable: screentime

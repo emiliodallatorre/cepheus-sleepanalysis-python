@@ -32,17 +32,29 @@ def normalize_sessions(raw: dict[str, Any], p: Parameters) -> pd.DataFrame:
     if raw["device_ids"] != p["device_ids"]:
         raise ValueError("Recollect Screen Time after changing the device allowlist.")
     records = []
+    restored_intervals = 0
     for row in raw["sessions"]:
         if row["device_id"] not in p["device_ids"]:
             continue
         start, end = _timestamp(row["start"]), _timestamp(row["end"])
         duration = row["duration_s"]
         if (
-            end <= start or isinstance(duration, bool)
+            isinstance(duration, bool)
             or not isinstance(duration, (int, float))
             or not math.isfinite(duration) or duration < 0
         ):
-            raise ValueError(f"Invalid interval for device {row['device_id']}.")
+            raise ValueError(
+                f"Invalid duration for device {row['device_id']}: {duration!r}."
+            )
+        # The CLI exports whole-second timestamps but retains fractional durations.
+        if end == start and 0 < duration < 1:
+            end = start + pd.Timedelta(seconds=duration)
+            restored_intervals += 1
+        if end <= start:
+            raise ValueError(
+                f"Invalid interval for device {row['device_id']}: "
+                f"start={row['start']!r}, end={row['end']!r}, duration_s={duration!r}."
+            )
         records.append({
             "device_id": row["device_id"],
             "device": row["device"],
@@ -53,6 +65,12 @@ def normalize_sessions(raw: dict[str, Any], p: Parameters) -> pd.DataFrame:
             "duration_s": (end - start).total_seconds(),
         })
     frame = pd.DataFrame(records, columns=SESSION_COLUMNS)
+    if restored_intervals:
+        logger.warning(
+            "Restored %s sub-second intervals from exported duration_s; "
+            "whole-second start timestamps retain up to one second of uncertainty.",
+            restored_intervals,
+        )
     for column in ("start", "end"):
         frame[column] = pd.to_datetime(frame[column], utc=True)
     for device in p["device_ids"]:
@@ -199,6 +217,16 @@ def build_usage(
     validate(p)
     timestamp = now(p)
     collected = _timestamp(raw["collected_at"]).to_pydatetime()
+    observed_start = (
+        sessions["start"].min().tz_convert(p["timezone"]).date()
+        if len(sessions) else None
+    )
+    permissive = p["coverage_policy"] == "observed_sum"
+    if permissive:
+        logger.warning(
+            "Using summed observed device usage: absent device records contribute zero; "
+            "incomplete sync may undercount usage and simultaneous devices count twice."
+        )
     records = []
     for day in days(p):
         start = datetime.combine(day, time(0), ZoneInfo(p["timezone"]))
@@ -206,6 +234,9 @@ def build_usage(
         tomorrow = datetime.combine(day + timedelta(days=1), time(0), start.tzinfo)
         coverage = {device: _covered(device, day, p) for device in p["device_ids"]}
         ready = timestamp >= stop and collected >= stop
+        observed_available = observed_start is not None and day >= observed_start
+        usable = all(coverage.values()) or (permissive and observed_available)
+        evening_start = min(stop, datetime.combine(day, time(18), start.tzinfo))
         record = {
             "exposure_date": day.isoformat(),
             "target_sleep_date": (day + timedelta(days=1)).isoformat(),
@@ -214,18 +245,24 @@ def build_usage(
             "config_fingerprint": fingerprint(p),
             "coverage_confirmed": all(coverage.values()),
             "window_complete": ready,
+            "usage_available": usable,
+            "coverage_policy": p["coverage_policy"],
             "coverage_status": "confirmed" if all(coverage.values()) else "unknown",
             "combined_minutes": None,
             "evening_minutes": None,
             "summed_device_minutes": None,
+            "summed_evening_minutes": None,
             "full_day_combined_minutes": None,
+            "full_day_summed_device_minutes": None,
         }
         intervals = []
         for device in p["device_ids"]:
             subset = sessions.loc[sessions["device_id"] == device]
             clipped = _window(subset, start, stop)
             record[f"device__{device}__minutes"] = (
-                union_minutes(clipped) if coverage[device] and ready else None
+                union_minutes(clipped)
+                if (coverage[device] or (permissive and observed_available)) and ready
+                else None
             )
             intervals.extend(clipped)
         for platform in sorted(set(p["device_platforms"].values())):
@@ -235,13 +272,13 @@ def build_usage(
             ]
             subset = sessions.loc[sessions["device_id"].isin(devices)]
             record[f"platform__{platform}__minutes"] = (
-                union_minutes(_window(subset, start, stop))
-                if ready and all(coverage[device] for device in devices) else None
+                sum(record[f"device__{device}__minutes"] for device in devices)
+                if ready and (
+                    all(coverage[device] for device in devices)
+                    or (permissive and observed_available)
+                ) else None
             )
-        if all(coverage.values()) and ready:
-            evening_start = min(
-                stop, datetime.combine(day, time(18), start.tzinfo)
-            )
+        if usable and ready:
             record["combined_minutes"] = union_minutes(intervals)
             record["evening_minutes"] = union_minutes(
                 _window(sessions, evening_start, stop)
@@ -249,9 +286,21 @@ def build_usage(
             record["summed_device_minutes"] = sum(
                 record[f"device__{device}__minutes"] for device in p["device_ids"]
             )
+            record["summed_evening_minutes"] = sum(
+                union_minutes(_window(
+                    sessions.loc[sessions["device_id"] == device], evening_start, stop
+                ))
+                for device in p["device_ids"]
+            )
             if collected >= tomorrow and timestamp >= tomorrow:
                 record["full_day_combined_minutes"] = union_minutes(
                     _window(sessions, start, tomorrow)
+                )
+                record["full_day_summed_device_minutes"] = sum(
+                    union_minutes(_window(
+                        sessions.loc[sessions["device_id"] == device], start, tomorrow
+                    ))
+                    for device in p["device_ids"]
                 )
         records.append(record)
     return pd.DataFrame(records)
@@ -263,9 +312,12 @@ def align(
     frame = usage.merge(sleep, on="target_sleep_date", how="left", validate="one_to_one")
     frame["sleep_status"] = frame["sleep_status"].fillna("not_available")
     frame["eligible"] = (
-        frame["coverage_confirmed"] & frame["window_complete"]
+        frame["usage_available"] & frame["window_complete"]
         & frame["sleep_status"].eq("eligible") & frame["sleep_score"].notna()
         & frame["target_sleep_date"].le(now(p).date().isoformat())
+    )
+    frame["full_day_eligible"] = (
+        frame["eligible"] & frame["full_day_summed_device_minutes"].notna()
     )
     quality = {
         "generated_at": now(p).isoformat(),
@@ -277,13 +329,21 @@ def align(
         "exposure_to": usage["exposure_date"].max(),
         "days": len(frame),
         "paired_nights": int(frame["eligible"].sum()),
+        "full_day_paired_nights": int(frame["full_day_eligible"].sum()),
         "unknown_coverage_days": int((~frame["coverage_confirmed"]).sum()),
         "incomplete_windows": int((~frame["window_complete"]).sum()),
         "sleep_status_counts": {
             str(key): int(value) for key, value in frame["sleep_status"].value_counts().items()
         },
         "screen_collected_at": raw["collected_at"],
-        "coverage_basis": "Explicit user-confirmed ranges; absent sessions alone are not zero.",
+        "coverage_policy": p["coverage_policy"],
+        "coverage_basis": (
+            "Observed usage summed across devices from the first retained session day; "
+            "absent device records count as zero observed usage, not proven inactivity."
+            if p["coverage_policy"] == "observed_sum"
+            else "Explicit user-confirmed ranges; absent sessions alone are not zero."
+        ),
+        "unavailable_usage_days": int((~frame["usage_available"]).sum()),
         "sleep_window_rule": "Main overnight heuristic: 2..16h, ends on reported morning "
         "before 18:00, starts after exposure cutoff and before morning noon.",
     }

@@ -15,7 +15,7 @@ from .common import (
 )
 
 logger = logging.getLogger(__name__)
-FEATURES = ["combined_minutes", "evening_minutes", "weekend"]
+FEATURES = ["summed_device_minutes", "summed_evening_minutes", "weekend"]
 BACKTEST_COLUMNS = [
     "exposure_date", "target_sleep_date", "training_through",
     "actual_score", "regression_score", "baseline_score"
@@ -77,6 +77,8 @@ def train(
         "regression_rmse": None, "baseline_rmse": None,
         "evaluation": "Retrospective expanding-window model-selection backtest. "
         "Revised source records may differ from what was available at the time.",
+        "coverage_policy": p["coverage_policy"],
+        "usage_measure": "Summed device-minutes; simultaneous devices count twice.",
     }
     predictions = []
     if len(paired) >= int(p["min_paired_nights"]):
@@ -185,9 +187,14 @@ def predict(
         or current["config_fingerprint"].iloc[0] != fingerprint(p)
     ):
         raise ValueError("Today's cached usage is stale; rerun preparation and training.")
-    if not current["coverage_confirmed"].iloc[0] or current[FEATURES].isna().any().any():
+    if not current["usage_available"].iloc[0] or current[FEATURES].isna().any().any():
         result["reason"] = "today_device_coverage_unknown"
         return result
+    if not current["coverage_confirmed"].iloc[0]:
+        result["warnings"].append(
+            "Device coverage is unconfirmed: missing records count as zero observed "
+            "usage, so incomplete sync can undercount exposure."
+        )
     if pd.Timestamp(model["trained_at"]).date() != today:
         raise ValueError("Model is not trained for today's forecast; rerun training.")
     features = current[FEATURES]

@@ -40,7 +40,7 @@ def fingerprint(p: Parameters) -> str:
     fields = (
         "timezone", "cutoff", "device_ids", "device_platforms", "confirmed_coverage", "demo",
         "min_paired_nights", "initial_training_nights", "min_backtest_nights",
-        "ridge_alpha",
+        "ridge_alpha", "coverage_policy",
     )
     return hashlib.sha256(
         json.dumps({key: p[key] for key in fields}, sort_keys=True).encode()
@@ -70,6 +70,8 @@ def validate(p: Parameters) -> None:
     if not ids or len(set(ids)) != len(ids):
         raise ValueError("Configure a nonempty, unique study.device_ids allowlist.")
     platforms = p["device_platforms"]
+    if p["coverage_policy"] not in ("confirmed", "observed_sum"):
+        raise ValueError("coverage_policy must be confirmed or observed_sum.")
     if set(platforms) != set(ids) or not set(platforms.values()) <= {"mac", "iphone", "ipad"}:
         raise ValueError("Map each selected device_id to mac, iphone or ipad.")
     if p["garmin_region"] not in ("global", "china"):
